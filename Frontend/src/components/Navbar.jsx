@@ -24,8 +24,8 @@ const Navbar = () => {
         <header className="absolute top-0 left-0 right-0 p-4 sm:p-6 flex justify-between items-center z-50">
             {/* Top Left: Hermes Brand Title */}
             <div className="flex items-center space-x-2">
-                <span className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-wider uppercase text-gray-900 dark:text-white transition-colors drop-shadow-sm select-none">
-                    Hermes
+                <span className="text-2xl sm:text-2xl lg:text-3xl font-extrabold tracking-wider uppercase text-gray-900 dark:text-white transition-colors drop-shadow-sm select-none">
+                    Hermes/AI
                 </span>
             </div>
 
