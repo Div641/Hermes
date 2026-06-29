@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema(
 //to enhance security:
 //password enter krte hi pre('save') will run automatically to hash them
 userSchema.pre('save', async function () {
-    if (!this.isModified('password')) return next(); //password change hua toh return vrna hash it again
+    if (!this.isModified('password')) return ; //password change hua toh return vrna hash it again
     this.password = await bcrypt.hash(this.password, 10);
 });
 //used to compare hashed and this.password
