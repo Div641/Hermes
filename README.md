@@ -85,8 +85,8 @@ perplexity/
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/ankurdotio/cohort-2.0.git
-cd cohort-2.0/perplexity
+git clone https://github.com/Div641/Hermes.git
+cd Backend/Hermes
 ```
 
 **Backend:**
