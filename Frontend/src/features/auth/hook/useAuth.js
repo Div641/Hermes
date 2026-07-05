@@ -13,8 +13,10 @@ export function useAuth() {
         try {
             dispatch(setLoading(true))
             const data = await register({ email, username, password })
+            return true;
         } catch (error) {
             dispatch(setError(error.response?.data?.message || "Registration failed"))
+            return false;
         } finally {
             dispatch(setLoading(false))
         }
@@ -25,8 +27,10 @@ export function useAuth() {
             dispatch(setLoading(true))
             const data = await login({ email, password })
             dispatch(setUser(data.user))
+            return true;
         } catch (err) {
             dispatch(setError(err.response?.data?.message || "Login failed"))
+            return false;
         } finally {
             dispatch(setLoading(false))
         }
@@ -44,10 +48,38 @@ export function useAuth() {
         }
     }
 
+    // async function handleForgotPassword({ email }) {
+    //     try {
+    //         dispatch(setLoading(true))
+    //         const data = await forgotPassword({ email })
+    //         return { success: true, message: data.message }
+    //     } catch (err) {
+    //         const errMsg = err.response?.data?.message || "Failed to send reset link"
+    //         dispatch(setError(errMsg))
+    //         return { success: false, error: errMsg }
+    //     } finally {
+    //         dispatch(setLoading(false))
+    //     }
+    // }
+
+    // async function handleResetPassword({ token, password }) {
+    //     try {
+    //         dispatch(setLoading(true))
+    //         const data = await resetPassword({ token, password })
+    //         return { success: true, message: data.message }
+    //     } catch (err) {
+    //         const errMsg = err.response?.data?.message || "Failed to reset password"
+    //         dispatch(setError(errMsg))
+    //         return { success: false, error: errMsg }
+    //     } finally {
+    //         dispatch(setLoading(false))
+    //     }
+    // }
+
     return {
         handleRegister,
         handleLogin,
-        handleGetMe,
+        handleGetMe
     }
 
 }

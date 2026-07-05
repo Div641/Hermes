@@ -20,3 +20,13 @@ export async function getMe() {
     const response = await api.get("/api/auth/get-me")
     return response.data
 }
+
+// export async function forgotPassword({ email }) {
+//     const response = await api.post("/api/auth/forgot-password", { email })
+//     return response.data
+// }
+
+// export async function resetPassword({ token, password }) {
+//     const response = await api.post("/api/auth/reset-password", { token, password })
+//     return response.data
+// }
