@@ -20,7 +20,6 @@ export default function Register() {
   const [resendLoading, setResendLoading] = useState(false);
   const [resendMessage, setResendMessage] = useState('');
   
-  const [localError, setLocalError] = useState('');
 
   const navigate = useNavigate();
   const { handleRegister } = useAuth();

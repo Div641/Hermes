@@ -1,22 +1,649 @@
-import React,{useEffect} from 'react'
-import { useSelector } from 'react-redux'
-import {useChat} from '../hooks/useChat'
-//using this reload pr  vapas login nhi khulega
+import React, { useState, useEffect, useRef } from 'react';
+import { useSelector } from 'react-redux';
+import { useChat } from '../hooks/useChat';
+import { fetchChats, fetchMessages, sendMessageApi, deleteChatApi } from '../service/chat.api';
+
+// Helper function to format timestamp
+const formatTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+// Fallback Mock Data for preview & testing when backend is offline
+const MOCK_CHATS = [
+    { _id: "chat-1", title: "Analyze my performance", updatedAt: new Date().toISOString() },
+    { _id: "chat-2", title: "Suggest UI improvements", updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
+    { _id: "chat-3", title: "Explain this code", updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() },
+    { _id: "chat-4", title: "Best practices for API security", updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() },
+    { _id: "chat-5", title: "Roadmap for Next.js", updatedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString() },
+    { _id: "chat-6", title: "Help with data structure", updatedAt: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString() }
+];
+
+const MOCK_MESSAGES = {
+    "chat-1": [
+        { _id: "m1", role: "user", content: "Can you help me analyze this user flow?", createdAt: new Date().toISOString() },
+        { _id: "m2", role: "ai", content: "Absolutely! I'd be happy to help you analyze the user flow. Please share the details or file, and I'll break it down for you.", createdAt: new Date().toISOString() }
+    ],
+    "chat-2": [
+        { _id: "m3", role: "user", content: "Suggest some UI improvements for a dashboard application.", createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
+        { _id: "m4", role: "ai", content: "For a modern dashboard, focus on glassmorphism (translucent blur panels), custom glowing charts, deep indigo/slate dark-mode color schemes, and micro-animations on interactive elements to make the interface feel alive.", createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
+    ]
+};
+
 const Dashboard = () => {
+    const chatService = useChat();
+    const { user } = useSelector(state => state.auth);
 
-    const chat=useChat()
+    // Display values
+    const displayName = user?.username || "Divyanka";
 
-    const { user } = useSelector(state => state.auth)
-
-    console.log(user)
-
-    useEffect(() => {
-    chat.initializeSocketConnection()
-  }, [])
+    // Component State
+    const [chats, setChats] = useState([]);
+    const [activeChatId, setActiveChatId] = useState(null);
+    const [messages, setMessages] = useState([]);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [inputMessage, setInputMessage] = useState("");
     
-  return (
-    <div>Dashboard</div>
-  )
-}
+    // UI Layout States
+    const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+    const [isSending, setIsSending] = useState(false);
+    const [isMockMode, setIsMockMode] = useState(false);
 
-export default Dashboard
+    // Scroll ref
+    const messagesEndRef = useRef(null);
+
+    // Initialize sockets and load past chats on mount
+    useEffect(() => {
+        if (chatService && typeof chatService.initializeSocketConnection === 'function') {
+            chatService.initializeSocketConnection();
+        }
+        loadChats();
+    }, []);
+
+    // Scroll to bottom whenever messages change
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    // Fetch past chats
+    const loadChats = async () => {
+        try {
+            const data = await fetchChats();
+            setChats(data.chats || []);
+            setIsMockMode(false);
+        } catch (error) {
+            console.warn("Backend server offline. Falling back to mock data.", error);
+            setChats(MOCK_CHATS);
+            setIsMockMode(true);
+        }
+    };
+
+    // Load messages of a specific chat
+    const loadChatMessages = async (chatId) => {
+        setActiveChatId(chatId);
+        try {
+            if (isMockMode) {
+                setMessages(MOCK_MESSAGES[chatId] || []);
+                return;
+            }
+            const data = await fetchMessages(chatId);
+            setMessages(data.messages || []);
+        } catch (error) {
+            console.error("Failed to load messages:", error);
+            setMessages(MOCK_MESSAGES[chatId] || []);
+        }
+    };
+
+    // Handle initiating a new chat
+    const handleNewChat = () => {
+        setActiveChatId(null);
+        setMessages([]);
+        setInputMessage("");
+    };
+
+    // Handle sending a message
+    const handleSendMessage = async (e) => {
+        if (e) e.preventDefault();
+        if (!inputMessage.trim() || isSending) return;
+
+        const userMsgText = inputMessage;
+        setInputMessage("");
+        setIsSending(true);
+
+        const tempUserMessage = {
+            _id: `temp-u-${Date.now()}`,
+            role: "user",
+            content: userMsgText,
+            createdAt: new Date().toISOString()
+        };
+
+        // Append user message instantly to the UI
+        setMessages(prev => [...prev, tempUserMessage]);
+
+        try {
+            if (isMockMode) {
+                // Simulate local AI response for mock preview
+                setTimeout(() => {
+                    const tempAiMessage = {
+                        _id: `temp-a-${Date.now()}`,
+                        role: "ai",
+                        content: `Hello! This is a mock AI response in preview mode to: "${userMsgText}". Start your backend server to interact with the real Gemini model.`,
+                        createdAt: new Date().toISOString()
+                    };
+                    setMessages(prev => [...prev, tempAiMessage]);
+                    
+                    // If it was a new chat, create a mock chat item
+                    if (!activeChatId) {
+                        const newMockChat = {
+                            _id: `chat-${Date.now()}`,
+                            title: userMsgText.length > 25 ? userMsgText.substring(0, 25) + "..." : userMsgText,
+                            updatedAt: new Date().toISOString()
+                        };
+                        setChats(prev => [newMockChat, ...prev]);
+                        setActiveChatId(newMockChat._id);
+                        MOCK_MESSAGES[newMockChat._id] = [tempUserMessage, tempAiMessage];
+                    }
+                    setIsSending(false);
+                }, 1000);
+                return;
+            }
+
+            // Real backend API call
+            const data = await sendMessageApi({ message: userMsgText, chatId: activeChatId });
+            
+            // If it was a new chat, update chat list and select the new chat
+            if (!activeChatId) {
+                await loadChats();
+                setActiveChatId(data.chat._id);
+                setMessages(prev => [...prev.filter(m => !m._id.startsWith('temp-')), data.aiMessage]);
+            } else {
+                setMessages(prev => [...prev, data.aiMessage]);
+            }
+        } catch (error) {
+            console.error("Failed to send message:", error);
+            // Append an error message from AI
+            setMessages(prev => [...prev, {
+                _id: `error-${Date.now()}`,
+                role: "ai",
+                content: "Sorry, I encountered an error connecting to the Hermes server. Please ensure the backend is running.",
+                createdAt: new Date().toISOString()
+            }]);
+        } finally {
+            if (!isMockMode) {
+                setIsSending(false);
+            }
+        }
+    };
+
+    // Handle deleting a chat
+    const handleDeleteChat = async (e, chatId) => {
+        e.stopPropagation(); // Stop from clicking the chat
+        if (!confirm("Are you sure you want to delete this chat?")) return;
+
+        try {
+            if (!isMockMode) {
+                await deleteChatApi(chatId);
+            }
+            setChats(prev => prev.filter(c => c._id !== chatId));
+            if (activeChatId === chatId) {
+                handleNewChat();
+            }
+        } catch (error) {
+            console.error("Failed to delete chat:", error);
+            alert("Error deleting chat from server. Deleting locally.");
+            setChats(prev => prev.filter(c => c._id !== chatId));
+            if (activeChatId === chatId) {
+                handleNewChat();
+            }
+        }
+    };
+
+    // Group chats by date helper
+    const groupChatsByDate = (chatsList) => {
+        const today = [];
+        const yesterday = [];
+        const threeDaysAgo = [];
+        const sevenDaysAgo = [];
+        const last30Days = [];
+
+        const now = new Date();
+        
+        chatsList.forEach(chat => {
+            const chatDate = new Date(chat.updatedAt || chat.createdAt);
+            const diffTime = Math.abs(now - chatDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            const isToday = now.toDateString() === chatDate.toDateString();
+            
+            const tempYesterday = new Date(now);
+            tempYesterday.setDate(now.getDate() - 1);
+            const isYesterday = tempYesterday.toDateString() === chatDate.toDateString();
+
+            if (isToday) {
+                today.push(chat);
+            } else if (isYesterday) {
+                yesterday.push(chat);
+            } else if (diffDays <= 3) {
+                threeDaysAgo.push(chat);
+            } else if (diffDays <= 7) {
+                sevenDaysAgo.push(chat);
+            } else {
+                last30Days.push(chat);
+            }
+        });
+
+        return {
+            "Today": today,
+            "Yesterday": yesterday,
+            "3 days ago": threeDaysAgo,
+            "7 days ago": sevenDaysAgo,
+            "Last 30 days": last30Days
+        };
+    };
+
+    const filteredChats = chats.filter(chat => 
+        chat.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const groupedChats = groupChatsByDate(filteredChats);
+
+    return (
+        <div 
+            className="h-screen w-screen bg-gradient-to-b from-black via-[#04050c] to-[#0a0e28] flex overflow-hidden font-sans select-none text-slate-100 relative"
+        >
+            {/* Global SVG Gradients Definition */}
+            <svg className="absolute w-0 h-0" width="0" height="0">
+                <defs>
+                    <linearGradient id="sparkle-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#4facfe" />
+                        <stop offset="50%" stopColor="#00f2fe" />
+                        <stop offset="100%" stopColor="#6366f1" />
+                    </linearGradient>
+                    <linearGradient id="gold-rim-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#fef08a" />
+                        <stop offset="50%" stopColor="#ca8a04" />
+                        <stop offset="100%" stopColor="#854d0e" />
+                    </linearGradient>
+                </defs>
+            </svg>
+
+            {/* Background Glow Blobs for depth */}
+            <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-blue-900/10 rounded-full blur-[120px] pointer-events-none z-0"></div>
+            <div className="absolute top-10 right-10 w-96 h-96 bg-amber-500/5 rounded-full blur-[100px] pointer-events-none z-0"></div>
+
+            {/* Sidebar */}
+            <aside 
+                className={`h-full relative z-10 flex flex-col transition-all duration-500 ease-in-out bg-[#0b1026]/40 border-r border-[#1e295d]/20 backdrop-blur-xl ${
+                    isSidebarExpanded ? 'w-80' : 'w-20'
+                }`}
+            >
+                {/* Sidebar Header */}
+                <div className="flex items-center justify-between px-5 py-6">
+                    <div className="flex items-center gap-3">
+                        <img 
+                            src="/logo.png" 
+                            className="w-10 h-10 object-contain cursor-pointer hover:scale-105 transition-transform duration-300"
+                            onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+                            alt="Hermes Logo"
+                        />
+                        {isSidebarExpanded && (
+                            <span 
+                                className="text-xl font-black tracking-wider bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent cursor-pointer"
+                                onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+                            >
+                                HERMES
+                            </span>
+                        )}
+                    </div>
+                    {isSidebarExpanded && (
+                        <button 
+                            onClick={handleNewChat}
+                            className="p-2 rounded-xl border border-[#2b3a80]/50 hover:bg-[#121b47]/40 active:scale-95 transition-all text-blue-400 hover:text-blue-300 cursor-pointer shadow-md"
+                            title="New Conversation"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+
+                {/* Search Bar */}
+                {isSidebarExpanded && (
+                    <div className="px-4 mb-4">
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </span>
+                            <input 
+                                type="text"
+                                placeholder="Search conversations"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full bg-[#0a0f26]/60 border border-[#1e295d]/30 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-blue-500/50 text-white placeholder-slate-500 transition-colors"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Past Chats Section */}
+                <div className="flex-1 overflow-y-auto px-3 space-y-4 py-2 scrollbar-thin scrollbar-thumb-blue-500/10">
+                    {isSidebarExpanded ? (
+                        Object.keys(groupedChats).map(groupName => {
+                            const groupItems = groupedChats[groupName];
+                            if (groupItems.length === 0) return null;
+                            
+                            return (
+                                <div key={groupName} className="space-y-1">
+                                    <h3 className="text-xs font-semibold text-slate-400/80 px-2 tracking-wider uppercase mb-2">
+                                        {groupName}
+                                    </h3>
+                                    {groupItems.map(chatItem => (
+                                        <div 
+                                            key={chatItem._id}
+                                            onClick={() => loadChatMessages(chatItem._id)}
+                                            className={`group relative flex items-center justify-between px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 border-y border-r border-transparent border-l-2 ${
+                                                activeChatId === chatItem._id 
+                                                    ? 'bg-[#182354]/60 border-l-amber-500/80 shadow-md text-white' 
+                                                    : 'hover:bg-[#121b47]/30 border-l-transparent text-slate-300 hover:text-white'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3 overflow-hidden pr-8">
+                                                <svg className="w-4 h-4 flex-shrink-0 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                                </svg>
+                                                <span className="text-sm truncate select-none">
+                                                    {chatItem.title}
+                                                </span>
+                                            </div>
+                                            
+                                            {/* Chat deletion button */}
+                                            <button 
+                                                onClick={(e) => handleDeleteChat(e, chatItem._id)}
+                                                className="absolute right-3 opacity-0 group-hover:opacity-100 hover:text-red-400 p-1 rounded transition-opacity"
+                                                title="Delete Chat"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })
+                    ) : (
+                        // Collapsed Sidebar - Icons Only
+                        <div className="flex flex-col items-center gap-4 py-4">
+                            <button 
+                                onClick={handleNewChat}
+                                className="p-3 rounded-full bg-[#1b2559]/50 border border-[#2b3a80]/30 hover:bg-[#121b47]/70 text-blue-400 active:scale-95 transition-all cursor-pointer shadow-md"
+                                title="New Conversation"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                            </button>
+                            <div className="w-8 h-[1px] bg-[#1e295d]/30"></div>
+                            {chats.map(chatItem => (
+                                <button 
+                                    key={chatItem._id}
+                                    onClick={() => loadChatMessages(chatItem._id)}
+                                    className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer ${
+                                        activeChatId === chatItem._id 
+                                            ? 'bg-[#182354]/60 border-[#2b3c80]/50 text-blue-400' 
+                                            : 'hover:bg-[#121b47]/30 border-transparent text-slate-400 hover:text-white'
+                                    }`}
+                                    title={chatItem.title}
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Sidebar Bottom - Hermes Pro Card */}
+                {isSidebarExpanded && (
+                    <div className="p-4 border-t border-[#1e295d]/30">
+                        <div className="bg-gradient-to-br from-[#928520]/80 to-[#1c2966]/80 border border-[#2e4094]/30 rounded-2xl p-4 shadow-lg flex flex-col relative overflow-hidden group">
+                            <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-500"></div>
+                            
+                            <div className="flex items-center gap-2 mb-1.5 text-blue-200 font-bold text-sm">
+                                <span className="text-base text-yellow-300">𝄞</span>
+                                Upgrade to Hermes Pro
+                            </div>
+                            <p className="text-[11px] text-slate-250 leading-relaxed mb-4">
+                                Unlock unlimited messages, advanced models and more.
+                            </p>
+                            <div className="flex justify-between items-center">
+                                <button className="text-xs font-semibold text-white hover:underline cursor-pointer">
+                                    Upgrade coming soon
+                                </button>
+                                <button className="p-1.5 rounded-full bg-yellow-400 hover:bg-blue-500 text-white shadow transition-all cursor-pointer">
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </aside>
+
+            {/* Main Chat Panel */}
+            <main className="flex-1 h-full flex flex-col relative z-10 overflow-hidden bg-transparent">
+                
+                {/* Chat Top Bar */}
+                <header className="h-20 border-b border-[#1e295d]/10 bg-black/10 backdrop-blur-sm flex items-center justify-between px-6 sm:px-8">
+                    <div className="flex items-center gap-3">
+                        {/* {!isSidebarExpanded && (
+                            <img 
+                                src="/logo.png" 
+                                className="w-8 h-8 object-contain cursor-pointer hover:scale-105 transition-transform"
+                                onClick={() => setIsSidebarExpanded(true)}
+                                alt="Expand Sidebar"
+                            />
+                        )} */}
+                        <span className="text-base sm:text-lg font-bold text-white tracking-wide">
+                            {activeChatId 
+                                ? chats.find(c => c._id === activeChatId)?.title || "Hermes AI" 
+                                : "Hermes/AI"}
+                        </span>
+                        {isMockMode && (
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[10px] uppercase font-bold tracking-wider">
+                                Demo Mode
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Profile Avatar */}
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full border border-blue-500/30 p-[2px] bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-md">
+                            <div className="w-full h-full rounded-full bg-[#0a0f29] flex items-center justify-center font-bold text-sm text-slate-200">
+                                {displayName.substring(0, 2).toUpperCase()}
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                {/* Message Box or Hello Screen */}
+                <section className="flex-1 overflow-y-auto px-6 py-6 space-y-6 flex flex-col scrollbar-thin scrollbar-thumb-blue-500/10">
+                    
+                    {messages.length === 0 ? (
+                        // Welcome Screen (Your move, Divyanka!)
+                        <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 my-auto">
+                            
+                            {/* Centre Colorful Circle Icon */}
+                            <div className="relative flex items-center justify-center">
+                                <svg className="w-16 h-16 hover:scale-110 transition-transform duration-300 animate-pulse" viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="8" fill="url(#sparkle-grad)" stroke="url(#gold-rim-grad)" strokeWidth="1.5" />
+                                </svg>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h2 className="text-3xl sm:text-4xl font-medium tracking-normal text-white select-none">
+                                    Your move, {displayName}!
+                                </h2>
+                            </div>
+
+                            {/* Suggestion Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-2xl w-full pt-6 px-4">
+                                <div 
+                                    onClick={() => setInputMessage("Suggest some UI improvements")}
+                                    className="p-4 rounded-2xl bg-[#131314]/30 border border-slate-800/30 hover:bg-[#131314]/75 hover:border-amber-500/30 transition-all duration-300 cursor-pointer text-left group"
+                                >
+                                    <div className="font-bold text-sm text-slate-200 group-hover:text-amber-400 transition-colors">
+                                        Suggest UI improvements
+                                    </div>
+                                    <p className="text-xs text-slate-400/80 mt-1 leading-relaxed">
+                                        Learn best practices for designing a clean, modern aesthetic.
+                                    </p>
+                                </div>
+                                <div 
+                                    onClick={() => setInputMessage("Explain this code")}
+                                    className="p-4 rounded-2xl bg-[#131314]/30 border border-slate-800/30 hover:bg-[#131314]/75 hover:border-amber-500/30 transition-all duration-300 cursor-pointer text-left group"
+                                >
+                                    <div className="font-bold text-sm text-slate-200 group-hover:text-amber-400 transition-colors">
+                                        Explain code
+                                    </div>
+                                    <p className="text-xs text-slate-400/80 mt-1 leading-relaxed">
+                                        Paste a script block to get an optimized breakdown of its logic.
+                                    </p>
+                                </div>
+                            </div>
+
+                        </div>
+                    ) : (
+                        // Chat Stream (User on Right, AI on Left)
+                        <div className="space-y-6 flex flex-col justify-end">
+                            {messages.map((msg) => (
+                                <div 
+                                    key={msg._id}
+                                    className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                >
+                                    {msg.role === 'user' ? (
+                                        // User message (Right)
+                                        <div className="max-w-[70%] bg-gradient-to-r from-[#18225c] to-[#25368a] text-white rounded-2xl rounded-tr-none px-4 py-3.5 border border-[#3b4fa8]/40 shadow-lg flex flex-col relative select-text">
+                                            <p className="text-sm leading-relaxed break-words">
+                                                {msg.content}
+                                            </p>
+                                            <div className="flex items-center gap-1.5 justify-end mt-1.5 text-[10px] text-blue-300/80 select-none">
+                                                <span>{formatTime(msg.createdAt)}</span>
+                                                <svg className="w-3.5 h-3.5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        // AI message (Left)
+                                        <div className="max-w-[75%] flex gap-3.5 items-start">
+                                            {/* AI Avatar Circle */}
+                                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-sky-400 p-[1.5px] shadow-[0_0_15px_rgba(59,130,246,0.4)] flex-shrink-0 flex items-center justify-center mt-0.5">
+                                                <div className="w-full h-full rounded-full bg-[#0a0f29] flex items-center justify-center overflow-hidden">
+                                                    <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none">
+                                                        <circle cx="12" cy="12" r="9" fill="url(#sparkle-grad)" />
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* AI Message Bubble */}
+                                            <div className="bg-[#0e1638]/40 text-slate-100 rounded-2xl rounded-tl-none px-4 py-3.5 border border-[#2b3a80]/20 shadow-md flex flex-col select-text">
+                                                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                                    {msg.content}
+                                                </p>
+                                                <span className="text-[10px] text-slate-400/80 mt-2 select-none self-start">
+                                                    {formatTime(msg.createdAt)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+
+                            {/* Typing Indicator */}
+                            {isSending && (
+                                <div className="flex gap-3.5 items-start">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-sky-400 p-[1.5px] flex-shrink-0 animate-spin">
+                                        <div className="w-full h-full rounded-full bg-[#0a0f29] flex items-center justify-center">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-sky-300/40"></div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-[#0e1638]/40 rounded-2xl rounded-tl-none px-4 py-3.5 border border-[#2b3a80]/20 shadow-md flex items-center gap-1.5">
+                                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Scroll spacer */}
+                            <div ref={messagesEndRef} />
+                        </div>
+                    )}
+
+                </section>
+
+                {/* Message Input Box */}
+                <footer className="p-6 bg-transparent">
+                    <form 
+                        onSubmit={handleSendMessage}
+                        className="max-w-3xl w-full mx-auto bg-[#131314]/90 border border-transparent rounded-full px-6 py-3.5 flex items-center gap-4 shadow-2xl relative"
+                    >
+                        {/* Plus Add Button */}
+                        <button 
+                            type="button" 
+                            className="text-[#c4c7c5] hover:text-white p-1 rounded-full active:scale-90 transition-all cursor-pointer flex-shrink-0"
+                            title="Attach Content"
+                        >
+                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                            </svg>
+                        </button>
+
+                        {/* Input Area */}
+                        <input 
+                            type="text" 
+                            value={inputMessage}
+                            onChange={(e) => setInputMessage(e.target.value)}
+                            placeholder="Ask Hermes..."
+                            className="flex-1 bg-transparent border-none text-white text-base placeholder-[#c4c7c5] focus:outline-none py-1 select-text"
+                            disabled={isSending}
+                        />
+
+                        {/* Voice Input or Send Button */}
+                        {inputMessage.trim() ? (
+                            <button 
+                                type="submit" 
+                                disabled={isSending}
+                                className="p-2 rounded-full bg-blue-600 hover:bg-blue-500 text-white shadow active:scale-95 transition-all cursor-pointer flex items-center justify-center flex-shrink-0"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                                </svg>
+                            </button>
+                        ) : (
+                            <button 
+                                type="button" 
+                                className="text-[#c4c7c5] hover:text-white p-1 rounded-full active:scale-90 transition-all cursor-pointer flex-shrink-0"
+                                title="Voice Input"
+                            >
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" />
+                                </svg>
+                            </button>
+                        )}
+                    </form>
+                </footer>
+
+            </main>
+        </div>
+    );
+};
+
+export default Dashboard;
