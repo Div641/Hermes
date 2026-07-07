@@ -76,14 +76,14 @@ export async function getMessages(req,res){
     })
 
     if(!chat) {
-        return re.status(404).json({
+        return res.status(404).json({
             message:"Chat not found"
         })
     }
 
-    const messages = await messageModel.findOne({
+    const messages = await messageModel.find({
         chat:chatId,
-    })
+    }).sort({ createdAt: 1 })
 
     res.status(200).json({
         message:"Messages retrieved successfully",
@@ -102,13 +102,18 @@ export async function deleteChat(req,res){
         user:req.user.id
     })
 
-    await messageModel.deleteMany({
-        chat:chatId
-    })
-
     if(!chat){
         return res.status(404).json({
             message:"Chat not found"
         })
     }
+
+    await messageModel.deleteMany({
+        chat:chatId
+    })
+
+    return res.status(200).json({
+        message: "Chat deleted successfully",
+        success: true
+    })
 }

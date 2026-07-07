@@ -1,5 +1,5 @@
 import { useDispatch } from "react-redux";
-import { register, login, getMe } from "../service/auth.api";
+import { register, login, getMe, logout } from "../service/auth.api";
 import { setUser, setLoading, setError } from "../auth.slice";
 
 //this reinitializes the page right after reload
@@ -48,6 +48,18 @@ export function useAuth() {
         }
     }
 
+    async function handleLogout() {
+        try {
+            dispatch(setLoading(true))
+            await logout()
+            dispatch(setUser(null))
+        } catch (err) {
+            dispatch(setError(err.response?.data?.message || "Logout failed"))
+        } finally {
+            dispatch(setLoading(false))
+        }
+    }
+
     // async function handleForgotPassword({ email }) {
     //     try {
     //         dispatch(setLoading(true))
@@ -79,7 +91,8 @@ export function useAuth() {
     return {
         handleRegister,
         handleLogin,
-        handleGetMe
+        handleGetMe,
+        handleLogout
     }
 
 }

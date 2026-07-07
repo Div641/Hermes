@@ -185,3 +185,16 @@ export async function verifyEmail(req, res) {
         })
     }
 }
+
+/**
+ * @desc Logout user and clear cookie
+ * @route POST /api/auth/logout
+ * @access Private
+ */
+export async function logout(req, res) {
+    res.clearCookie("token");
+    return res.status(200).json({
+        message: "Logout successful",
+        success: true
+    });
+}

@@ -77,10 +77,10 @@ export default function Login() {
       </div>
 
       {/* Login Card */}
-      <div className="w-full max-w-4xl lg:max-w-5xl md:min-h-[460px] h-auto bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl rounded-2xl overflow-hidden shadow-2xl dark:shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-transparent dark:border-gray-800/80 grid grid-cols-1 md:grid-cols-2 transition-all duration-300 my-auto z-10">
+      <div className="w-full max-w-3xl md:max-w-4xl md:min-h-[400px] h-auto bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl rounded-2xl overflow-hidden shadow-2xl dark:shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-transparent dark:border-gray-800/80 grid grid-cols-1 md:grid-cols-2 transition-all duration-300 my-auto z-10">
 
         {/* Left Side */}
-        <div className="relative h-32 md:h-full min-h-[160px] md:min-h-[460px]">
+        <div className="relative h-32 md:h-full min-h-[160px] md:min-h-[400px]">
           <img
             src="/hermes.png"
             alt="Hermes"

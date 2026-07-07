@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { useChat } from '../hooks/useChat';
+import { useAuth } from '../../auth/hook/useAuth';
+import { initializeSocketConnection } from '../service/chat.socket';
 import { fetchChats, fetchMessages, sendMessageApi, deleteChatApi } from '../service/chat.api';
+import ReactMarkdown from 'react-markdown';
 
 // Helper function to format timestamp
 const formatTime = (dateString) => {
@@ -32,7 +34,7 @@ const MOCK_MESSAGES = {
 };
 
 const Dashboard = () => {
-    const chatService = useChat();
+    const auth = useAuth();
     const { user } = useSelector(state => state.auth);
 
     // Display values
@@ -49,15 +51,15 @@ const Dashboard = () => {
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
     const [isSending, setIsSending] = useState(false);
     const [isMockMode, setIsMockMode] = useState(false);
+    const [showAllChats, setShowAllChats] = useState(false);
+    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
     // Scroll ref
     const messagesEndRef = useRef(null);
 
     // Initialize sockets and load past chats on mount
     useEffect(() => {
-        if (chatService && typeof chatService.initializeSocketConnection === 'function') {
-            chatService.initializeSocketConnection();
-        }
+        initializeSocketConnection();
         loadChats();
     }, []);
 
@@ -131,7 +133,6 @@ const Dashboard = () => {
                         content: `Hello! This is a mock AI response in preview mode to: "${userMsgText}". Start your backend server to interact with the real Gemini model.`,
                         createdAt: new Date().toISOString()
                     };
-                    setMessages(prev => [...prev, tempAiMessage]);
                     
                     // If it was a new chat, create a mock chat item
                     if (!activeChatId) {
@@ -144,6 +145,11 @@ const Dashboard = () => {
                         setActiveChatId(newMockChat._id);
                         MOCK_MESSAGES[newMockChat._id] = [tempUserMessage, tempAiMessage];
                     }
+
+                    setMessages(prev => {
+                        const history = prev.filter(m => !m._id.startsWith('temp-'));
+                        return [...history, tempUserMessage, tempAiMessage];
+                    });
                     setIsSending(false);
                 }, 1000);
                 return;
@@ -156,10 +162,20 @@ const Dashboard = () => {
             if (!activeChatId) {
                 await loadChats();
                 setActiveChatId(data.chat._id);
-                setMessages(prev => [...prev.filter(m => !m._id.startsWith('temp-')), data.aiMessage]);
-            } else {
-                setMessages(prev => [...prev, data.aiMessage]);
             }
+
+            setMessages(prev => {
+                // Remove any temp placeholders (like loading indicator)
+                const history = prev.filter(m => !m._id.startsWith('temp-'));
+                // Re-append user message with database-grade formatting
+                const userMsgObj = {
+                    _id: `u-${Date.now()}`,
+                    role: "user",
+                    content: userMsgText,
+                    createdAt: tempUserMessage.createdAt
+                };
+                return [...history, userMsgObj, data.aiMessage];
+            });
         } catch (error) {
             console.error("Failed to send message:", error);
             // Append an error message from AI
@@ -246,7 +262,13 @@ const Dashboard = () => {
         chat.title.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const groupedChats = groupChatsByDate(filteredChats);
+    // Show only the 4 most recent chats overall if showAllChats is false.
+    // Otherwise, show all filtered chats.
+    const chatsToShow = showAllChats
+        ? filteredChats
+        : [...filteredChats].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)).slice(0, 4);
+
+    const groupedChats = groupChatsByDate(chatsToShow);
 
     return (
         <div 
@@ -274,7 +296,7 @@ const Dashboard = () => {
 
             {/* Sidebar */}
             <aside 
-                className={`h-full relative z-10 flex flex-col transition-all duration-500 ease-in-out bg-[#0b1026]/40 border-r border-[#1e295d]/20 backdrop-blur-xl ${
+                className={`h-full relative z-10 flex flex-col transition-all duration-500 ease-in-out bg-[#0b1026]/40 border-r border-yellow-500/20 backdrop-blur-xl ${
                     isSidebarExpanded ? 'w-80' : 'w-20'
                 }`}
             >
@@ -308,6 +330,33 @@ const Dashboard = () => {
                         </button>
                     )}
                 </div>
+
+                {/* Chats History toggle button */}
+                {isSidebarExpanded && (
+                    <div className="px-4 mb-3 flex-shrink-0">
+                        <button 
+                            type="button"
+                            onClick={() => setShowAllChats(!showAllChats)}
+                            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all duration-300 cursor-pointer text-xs font-bold tracking-wide select-none ${
+                                showAllChats 
+                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 font-bold' 
+                                    : 'bg-[#131b40]/20 border-[#2b3a80]/20 text-slate-400 hover:bg-[#121b47]/40 hover:text-white'
+                            }`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                </svg>
+                                <span>CHATS</span>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                                showAllChats ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                                {showAllChats ? 'Collapse' : 'Show All'}
+                            </span>
+                        </button>
+                    </div>
+                )}
 
                 {/* Search Bar */}
                 {isSidebarExpanded && (
@@ -388,7 +437,7 @@ const Dashboard = () => {
                                 </svg>
                             </button>
                             <div className="w-8 h-[1px] bg-[#1e295d]/30"></div>
-                            {chats.map(chatItem => (
+                            {chatsToShow.map(chatItem => (
                                 <button 
                                     key={chatItem._id}
                                     onClick={() => loadChatMessages(chatItem._id)}
@@ -442,14 +491,6 @@ const Dashboard = () => {
                 {/* Chat Top Bar */}
                 <header className="h-20 border-b border-[#1e295d]/10 bg-black/10 backdrop-blur-sm flex items-center justify-between px-6 sm:px-8">
                     <div className="flex items-center gap-3">
-                        {/* {!isSidebarExpanded && (
-                            <img 
-                                src="/logo.png" 
-                                className="w-8 h-8 object-contain cursor-pointer hover:scale-105 transition-transform"
-                                onClick={() => setIsSidebarExpanded(true)}
-                                alt="Expand Sidebar"
-                            />
-                        )} */}
                         <span className="text-base sm:text-lg font-bold text-white tracking-wide">
                             {activeChatId 
                                 ? chats.find(c => c._id === activeChatId)?.title || "Hermes AI" 
@@ -462,29 +503,73 @@ const Dashboard = () => {
                         )}
                     </div>
 
-                    {/* Profile Avatar */}
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full border border-blue-500/30 p-[2px] bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-md">
+                    {/* Profile Avatar Button & Dropdown */}
+                    <div className="relative flex items-center gap-3">
+                        <button 
+                            onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                            className="w-10 h-10 rounded-full border border-amber-400 p-[2px] bg-gradient-to-tr from-blue-600 to-amber-600 shadow-md cursor-pointer hover:scale-105 active:scale-95 transition-all flex items-center justify-center"
+                            aria-label="User menu"
+                        >
                             <div className="w-full h-full rounded-full bg-[#0a0f29] flex items-center justify-center font-bold text-sm text-slate-200">
-                                {displayName.substring(0, 2).toUpperCase()}
+                                {displayName.substring(0, 1).toUpperCase()}
                             </div>
-                        </div>
+                        </button>
+
+                        {isProfileMenuOpen && (
+                            <div className="absolute right-0 top-12 mt-2 w-48 rounded-2xl bg-[#0b102b]/95 border border-[#1d2a6b]/50 backdrop-blur-xl shadow-2xl p-2 z-50 animate-fade-in">
+                                <div className="px-4 py-2 text-xs text-slate-400 border-b border-[#1e295d]/20 mb-1 select-none">
+                                    Logged in as <strong className="text-slate-200 block truncate">{displayName}</strong>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setIsProfileMenuOpen(false);
+                                        auth.handleLogout();
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-xl transition-all text-left cursor-pointer"
+                                >
+                                    <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                    </svg>
+                                    <span>Logout</span>
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </header>
 
                 {/* Message Box or Hello Screen */}
                 <section className="flex-1 overflow-y-auto px-6 py-6 space-y-6 flex flex-col scrollbar-thin scrollbar-thumb-blue-500/10">
                     
-                    {messages.length === 0 ? (
+                    {!activeChatId ? (
                         // Welcome Screen (Your move, Divyanka!)
                         <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 my-auto">
                             
-                            {/* Centre Colorful Circle Icon */}
-                            <div className="relative flex items-center justify-center">
-                                <svg className="w-16 h-16 hover:scale-110 transition-transform duration-300 animate-pulse" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="8" fill="url(#sparkle-grad)" stroke="url(#gold-rim-grad)" strokeWidth="1.5" />
-                                </svg>
-                            </div>
+                             {/* Centre Colorful Circle Icon with Softer Wavy Curves */}
+                             <div className="relative flex items-center justify-center mb-4">
+                                 <svg className="w-24 h-24 hover:scale-105 transition-transform duration-500 relative" viewBox="0 0 100 100" fill="none">
+                                     <defs>
+                                         <clipPath id="circle-clip">
+                                             <circle cx="50" cy="50" r="37" />
+                                         </clipPath>
+                                     </defs>
+                                     
+                                     {/* Soft underlay glow */}
+                                     <circle cx="50" cy="50" r="44" fill="url(#sparkle-grad)" opacity="0.18" className="blur-sm" />
+                                     
+                                     {/* Main sphere with gold gradient rim */}
+                                     <circle cx="50" cy="50" r="38" fill="url(#sparkle-grad)" stroke="url(#gold-rim-grad)" strokeWidth="2.2" />
+                                     
+                                     {/* Soft organic wavy lines clipped inside the sphere */}
+                                     <g clipPath="url(#circle-clip)" className="opacity-60">
+                                         {/* Wave 1 */}
+                                         <path d="M10,50 C30,38 40,62 60,50 C80,38 90,50 100,50" stroke="white" strokeWidth="1.2" opacity="0.6" strokeLinecap="round" className="animate-pulse" />
+                                         {/* Wave 2 */}
+                                         <path d="M10,55 C25,66 45,44 60,55 C75,66 85,55 100,55" stroke="#fef08a" strokeWidth="0.8" opacity="0.5" strokeLinecap="round" />
+                                         {/* Wave 3 */}
+                                         <path d="M10,45 C20,33 40,57 60,45 C80,33 90,45 100,45" stroke="#38bdf8" strokeWidth="1.0" opacity="0.5" strokeLinecap="round" />
+                                     </g>
+                                 </svg>
+                             </div>
 
                             <div className="space-y-2">
                                 <h2 className="text-3xl sm:text-4xl font-medium tracking-normal text-white select-none">
@@ -554,9 +639,26 @@ const Dashboard = () => {
                                             
                                             {/* AI Message Bubble */}
                                             <div className="bg-[#0e1638]/40 text-slate-100 rounded-2xl rounded-tl-none px-4 py-3.5 border border-[#2b3a80]/20 shadow-md flex flex-col select-text">
-                                                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                                                    {msg.content}
-                                                </p>
+                                                <div className="text-sm leading-relaxed whitespace-pre-wrap break-words prose prose-slate prose-invert max-w-none">
+                                                    <ReactMarkdown
+                                                        components={{
+                                                            p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                                                            ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 space-y-1" {...props} />,
+                                                            ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 space-y-1" {...props} />,
+                                                            li: ({node, ...props}) => <li className="text-sm" {...props} />,
+                                                            strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
+                                                            code: ({node, inline, className, children, ...props}) => {
+                                                                return inline ? (
+                                                                    <code className="bg-[#1b2559]/60 px-1.5 py-0.5 rounded text-xs text-amber-300 font-mono" {...props}>{children}</code>
+                                                                ) : (
+                                                                    <pre className="bg-black/40 border border-slate-800/40 p-3 rounded-lg overflow-x-auto text-xs text-emerald-400 font-mono my-2"><code {...props}>{children}</code></pre>
+                                                                )
+                                                            }
+                                                        }}
+                                                    >
+                                                        {msg.content}
+                                                    </ReactMarkdown>
+                                                </div>
                                                 <span className="text-[10px] text-slate-400/80 mt-2 select-none self-start">
                                                     {formatTime(msg.createdAt)}
                                                 </span>
