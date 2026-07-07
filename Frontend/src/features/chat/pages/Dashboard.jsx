@@ -647,13 +647,14 @@ const Dashboard = () => {
                                                             ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 space-y-1" {...props} />,
                                                             li: ({node, ...props}) => <li className="text-sm" {...props} />,
                                                             strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
-                                                            code: ({node, inline, className, children, ...props}) => {
-                                                                return inline ? (
-                                                                    <code className="bg-[#1b2559]/60 px-1.5 py-0.5 rounded text-xs text-amber-300 font-mono" {...props}>{children}</code>
-                                                                ) : (
-                                                                    <pre className="bg-black/40 border border-slate-800/40 p-3 rounded-lg overflow-x-auto text-xs text-emerald-400 font-mono my-2"><code {...props}>{children}</code></pre>
-                                                                )
-                                                            }
+                                                            code: ({node, className, children, ...props}) => {
+                                                            const isInline = !className || !className.startsWith('language-');
+                                                            return isInline ? (
+                                                                <code className="..." {...props}>{children}</code>
+                                                            ) : (
+                                                                <pre className="..."><code className={className} {...props}>{children}</code></pre>
+                                                            );
+                                                        }
                                                         }}
                                                     >
                                                         {msg.content}

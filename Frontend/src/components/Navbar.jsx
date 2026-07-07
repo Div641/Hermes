@@ -11,7 +11,7 @@ export default function Navbar({ isLanding = false, onOpenDocs }) {
   return (
     <nav className="w-full flex items-center justify-between px-6 py-4 md:px-12 md:py-6 transition-colors duration-300 bg-transparent relative z-50">
       {/* Logo & Brand */}
-      <Link to="/" className="flex items-center gap-2.5 group">
+      <div className="flex items-center gap-2.5 group">
         <img 
           src="/logo.png" 
           alt="Hermes Logo" 
@@ -20,7 +20,7 @@ export default function Navbar({ isLanding = false, onOpenDocs }) {
         <span className="text-xl md:text-2xl font-black tracking-wider text-slate-900 dark:text-white transition-colors duration-300">
           HERMES<span className="text-amber-500">/</span>AI
         </span>
-      </Link>
+      </div>
 
       {/* Center Links (Only on Landing Page) */}
       {isLanding && (
@@ -83,7 +83,7 @@ export default function Navbar({ isLanding = false, onOpenDocs }) {
             className="p-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/80 shadow-sm cursor-pointer transition-all duration-300 flex items-center justify-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400"
             title="Back to Landing Page"
           >
-            <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+            <svg className="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
             </svg>
             <span>Home</span>

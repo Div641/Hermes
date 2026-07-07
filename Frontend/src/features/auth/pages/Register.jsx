@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, Link ,Navigate } from 'react-router';
 import Navbar from '../../../components/Navbar';
 import { useAuth } from '../hook/useAuth';
 
@@ -88,7 +88,7 @@ export default function Register() {
     };
 
     // await handleRegister(payload);
-    handleRegister(payload);
+    
     const success = await handleRegister(payload);
     if(success) {
       setRegistered(true);

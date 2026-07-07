@@ -31,7 +31,7 @@ export const useChat = () => {
 
     async function handleGetChats(){
         dispatch(setLoading(true))
-        const data= await handleGetChats()
+        const data= await fetchChats()
         const {chats}=data
         dispatch(setChats(chats.reduce((acc,chat)=> {
             acc[chat._id]={
@@ -47,7 +47,7 @@ export const useChat = () => {
 
     async function handleOpenChat(chatId){
 
-        const data= await getMessages(chatId)
+        const data= await fetchMessages(chatId)
         const {messages} = data
 
         const formattedMessages = messages.map(msg => ({
