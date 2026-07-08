@@ -9,14 +9,15 @@ export async function sendMessage(req, res) {
         return res.status(400).json({ error: "Request body is missing or not JSON" });
     }
 
-    const {message, chat: chatId} = req.body;
+    const {message, chat: chatId, image} = req.body;
 
+    console.log("Backend sendMessage: req.body.chat =", req.body.chat, "chatId =", chatId);
     // console.log(title)
     
     let title=null, chat= null;
     
     if(!chatId)   {
-        title= await generateChatTitle(message);
+        title= message ? await generateChatTitle(message) : "Image Analysis";
         chat= await chatModel.create({
             user: req.user.id,
             title
@@ -27,14 +28,15 @@ export async function sendMessage(req, res) {
     
     const userMessage = await messageModel.create({
         chat:resolvedChatId,
-        content:message,
-        role:"user"
+        content:message || "",
+        role:"user",
+        image: image || undefined
     })
    
     const  messages= await messageModel.find({chat: resolvedChatId}).sort({createdAt: 1 }) //follow-up messages
     
     const result = await generateResponse(
-        messages.map(m => ({ role: m.role, content: m.content }))
+        messages.map(m => ({ role: m.role, content: m.content, image: m.image }))
     );
 
     const aiMessage = await messageModel.create({

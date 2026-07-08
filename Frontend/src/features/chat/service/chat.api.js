@@ -15,8 +15,8 @@ export async function fetchMessages(chatId) {
     return response.data; // Expected { messages: [...] }
 }
 
-export async function sendMessageApi({ message, chatId }) {
-    const response = await api.post("/api/chat/message", { message, chat: chatId });
+export async function sendMessageApi({ message, chatId, image }) {
+    const response = await api.post("/api/chat/message", { message, chat: chatId, image });
     return response.data; // Expected { chat, title, aiMessage }
 }
 

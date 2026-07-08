@@ -46,6 +46,7 @@ const Dashboard = () => {
     const [messages, setMessages] = useState([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [inputMessage, setInputMessage] = useState("");
+    const [selectedImage, setSelectedImage] = useState(null);
     
     // UI Layout States
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
@@ -54,8 +55,32 @@ const Dashboard = () => {
     const [showAllChats, setShowAllChats] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
-    // Scroll ref
+    // Refs
     const messagesEndRef = useRef(null);
+    const fileInputRef = useRef(null);
+
+    // Image Upload Handlers
+    const handleImageChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setSelectedImage(reader.result);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const triggerFileSelect = () => {
+        fileInputRef.current?.click();
+    };
+
+    const clearSelectedImage = () => {
+        setSelectedImage(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+    };
 
     // Initialize sockets and load past chats on mount
     useEffect(() => {
@@ -107,16 +132,23 @@ const Dashboard = () => {
     // Handle sending a message
     const handleSendMessage = async (e) => {
         if (e) e.preventDefault();
-        if (!inputMessage.trim() || isSending) return;
+        if ((!inputMessage.trim() && !selectedImage) || isSending) return;
 
+        console.log("handleSendMessage: activeChatId =", activeChatId);
         const userMsgText = inputMessage;
+        const userMsgImage = selectedImage;
         setInputMessage("");
+        setSelectedImage(null);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
         setIsSending(true);
 
         const tempUserMessage = {
             _id: `temp-u-${Date.now()}`,
             role: "user",
             content: userMsgText,
+            image: userMsgImage,
             createdAt: new Date().toISOString()
         };
 
@@ -130,15 +162,18 @@ const Dashboard = () => {
                     const tempAiMessage = {
                         _id: `temp-a-${Date.now()}`,
                         role: "ai",
-                        content: `Hello! This is a mock AI response in preview mode to: "${userMsgText}". Start your backend server to interact with the real Gemini model.`,
+                        content: userMsgImage
+                            ? `Hello! I received your image in mock preview mode along with your prompt: "${userMsgText || "(no text)"}". Start your backend server to interact with the real Gemini model.`
+                            : `Hello! This is a mock AI response in preview mode to: "${userMsgText}". Start your backend server to interact with the real Gemini model.`,
                         createdAt: new Date().toISOString()
                     };
                     
                     // If it was a new chat, create a mock chat item
                     if (!activeChatId) {
+                        const chatTitleText = userMsgText.trim() || "Image Analysis";
                         const newMockChat = {
                             _id: `chat-${Date.now()}`,
-                            title: userMsgText.length > 25 ? userMsgText.substring(0, 25) + "..." : userMsgText,
+                            title: chatTitleText.length > 25 ? chatTitleText.substring(0, 25) + "..." : chatTitleText,
                             updatedAt: new Date().toISOString()
                         };
                         setChats(prev => [newMockChat, ...prev]);
@@ -156,7 +191,11 @@ const Dashboard = () => {
             }
 
             // Real backend API call
-            const data = await sendMessageApi({ message: userMsgText, chatId: activeChatId });
+            const data = await sendMessageApi({ 
+                message: userMsgText, 
+                chatId: activeChatId, 
+                image: userMsgImage 
+            });
             
             // If it was a new chat, update chat list and select the new chat
             if (!activeChatId) {
@@ -172,6 +211,7 @@ const Dashboard = () => {
                     _id: `u-${Date.now()}`,
                     role: "user",
                     content: userMsgText,
+                    image: userMsgImage,
                     createdAt: tempUserMessage.createdAt
                 };
                 return [...history, userMsgObj, data.aiMessage];
@@ -540,7 +580,7 @@ const Dashboard = () => {
                 {/* Message Box or Hello Screen */}
                 <section className="flex-1 overflow-y-auto px-6 py-6 space-y-6 flex flex-col scrollbar-thin scrollbar-thumb-blue-500/10">
                     
-                    {!activeChatId ? (
+                    {(!activeChatId && messages.length === 0) ? (
                         // Welcome Screen (Your move, Divyanka!)
                         <div className="flex-1 flex flex-col items-center justify-center text-center space-y-6 my-auto">
                             
@@ -573,7 +613,7 @@ const Dashboard = () => {
 
                             <div className="space-y-2">
                                 <h2 className="text-3xl sm:text-4xl font-medium tracking-normal text-white select-none">
-                                    Your move, {displayName}!
+                                    𝄞 Let's Muse, {displayName}!
                                 </h2>
                             </div>
 
@@ -615,9 +655,18 @@ const Dashboard = () => {
                                     {msg.role === 'user' ? (
                                         // User message (Right)
                                         <div className="max-w-[70%] bg-gradient-to-r from-[#18225c] to-[#25368a] text-white rounded-2xl rounded-tr-none px-4 py-3.5 border border-[#3b4fa8]/40 shadow-lg flex flex-col relative select-text">
-                                            <p className="text-sm leading-relaxed break-words">
-                                                {msg.content}
-                                            </p>
+                                            {msg.image && (
+                                                <img 
+                                                    src={msg.image} 
+                                                    alt="Attached content" 
+                                                    className="max-h-48 rounded-lg mb-2 object-cover border border-[#3b4fa8]/20 shadow-md"
+                                                />
+                                            )}
+                                            {msg.content && (
+                                                <p className="text-sm leading-relaxed break-words">
+                                                    {msg.content}
+                                                </p>
+                                            )}
                                             <div className="flex items-center gap-1.5 justify-end mt-1.5 text-[10px] text-blue-300/80 select-none">
                                                 <span>{formatTime(msg.createdAt)}</span>
                                                 <svg className="w-3.5 h-3.5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -691,24 +740,50 @@ const Dashboard = () => {
                     )}
 
                 </section>
+                <footer className="p-6 bg-transparent flex flex-col gap-3">
+                    {selectedImage && (
+                        <div className="max-w-3xl w-full mx-auto bg-[#1e1e21]/90 border border-[#2b3a80]/30 rounded-2xl p-3 flex items-center gap-3 relative shadow-lg">
+                            <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-700">
+                                <img src={selectedImage} alt="Preview" className="w-full h-full object-cover" />
+                                <button 
+                                    type="button"
+                                    onClick={clearSelectedImage}
+                                    className="absolute top-0.5 right-0.5 bg-red-600 hover:bg-red-500 text-white rounded-full p-0.5 shadow cursor-pointer flex items-center justify-center"
+                                >
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <span className="text-xs text-[#c4c7c5]">Image attached. Ready to send.</span>
+                        </div>
+                    )}
 
-                {/* Message Input Box */}
-                <footer className="p-6 bg-transparent">
                     <form 
                         onSubmit={handleSendMessage}
                         className="max-w-3xl w-full mx-auto bg-[#131314]/90 border border-transparent rounded-full px-6 py-3.5 flex items-center gap-4 shadow-2xl relative"
                     >
+                        {/* Hidden File Input */}
+                        <input 
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleImageChange}
+                            accept="image/*"
+                            className="hidden"
+                        />
+
                         {/* Plus Add Button */}
                         <button 
                             type="button" 
+                            onClick={triggerFileSelect}
                             className="text-[#c4c7c5] hover:text-white p-1 rounded-full active:scale-90 transition-all cursor-pointer flex-shrink-0"
-                            title="Attach Content"
+                            title="Attach Image"
                         >
                             <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
                             </svg>
                         </button>
-
+ 
                         {/* Input Area */}
                         <input 
                             type="text" 
@@ -718,9 +793,9 @@ const Dashboard = () => {
                             className="flex-1 bg-transparent border-none text-white text-base placeholder-[#c4c7c5] focus:outline-none py-1 select-text"
                             disabled={isSending}
                         />
-
+ 
                         {/* Voice Input or Send Button */}
-                        {inputMessage.trim() ? (
+                        {(inputMessage.trim() || selectedImage) ? (
                             <button 
                                 type="submit" 
                                 disabled={isSending}
@@ -736,9 +811,11 @@ const Dashboard = () => {
                                 className="text-[#c4c7c5] hover:text-white p-1 rounded-full active:scale-90 transition-all cursor-pointer flex-shrink-0"
                                 title="Voice Input"
                             >
-                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z" />
-                                </svg>
+                                <div className="w-6.5 h-6.5 rounded-full bg-black flex items-center justify-center">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                                        <path d="M12 19V5M6 11l6-6 6 6" />
+                                    </svg>
+                                </div>
                             </button>
                         )}
                     </form>

@@ -21,9 +21,26 @@ export async function generateResponse(messages) {
 
     const response = await geminiModel.invoke(messages.map(msg => {
         if (msg.role == "user") {
-            return new HumanMessage(msg.content)
+            if (msg.image) {
+                const mimeType = msg.image.match(/data:(.*?);base64/)?.[1] || "image/jpeg";
+                const base64Data = msg.image.split(",")[1] || msg.image;
+                return new HumanMessage({
+                    content: [
+                        {
+                            type: "text",
+                            text: msg.content || "Analyze this image."
+                        },
+                        {
+                            type: "image_url",
+                            image_url: `data:${mimeType};base64,${base64Data}`
+                        }
+                    ]
+                });
+            } else {
+                return new HumanMessage(msg.content || "");
+            }
         } else if (msg.role == "ai") {
-            return new AIMessage(msg.content)
+            return new AIMessage(msg.content || "");
         }
     }));
 
