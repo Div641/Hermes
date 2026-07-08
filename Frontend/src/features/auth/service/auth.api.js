@@ -26,6 +26,11 @@ export async function logout() {
     return response.data
 }
 
+export async function resendVerification({ email }) {
+    const response = await api.post("/api/auth/resend-verification", { email })
+    return response.data
+}
+
 // export async function forgotPassword({ email }) {
 //     const response = await api.post("/api/auth/forgot-password", { email })
 //     return response.data

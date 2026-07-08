@@ -22,7 +22,7 @@ export default function Register() {
   
 
   const navigate = useNavigate();
-  const { handleRegister } = useAuth();
+  const { handleRegister, handleResendVerification } = useAuth();
 
   // Selectors from Redux store
   const user = useSelector((state) => state.auth.user);
@@ -95,15 +95,17 @@ export default function Register() {
     }
   };
 
-  const handleResendMail = () => {
+  const handleResendMail = async () => {
     setResendLoading(true);
     setResendMessage('');
 
-    // Simulate calling the mail service to resend verification link
-    setTimeout(() => {
-      setResendLoading(false);
+    const res = await handleResendVerification({ email });
+    setResendLoading(false);
+    if (res.success) {
       setResendMessage('Verification email has been resent to ' + email + '!');
-    }, 1200);
+    } else {
+      setResendMessage('Failed to resend verification email: ' + res.error);
+    }
   };
 
   return (
@@ -115,7 +117,7 @@ export default function Register() {
       </div>
 
       {/* Main card */}
-      <div className="w-full max-w-2xl md:max-w-3xl md:min-h-[400px] h-auto bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl rounded-2xl overflow-hidden shadow-2xl dark:shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-transparent dark:border-gray-800/80 grid grid-cols-1 md:grid-cols-2 transition-all duration-300 my-auto z-10">
+      <div className="w-full max-w-3xl md:max-w-4xl md:min-h-[400px] h-auto bg-white dark:bg-slate-900/75 dark:backdrop-blur-xl rounded-2xl overflow-hidden shadow-2xl dark:shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-transparent dark:border-gray-800/80 grid grid-cols-1 md:grid-cols-2 transition-all duration-300 my-auto z-10">
 
         {/* Left Side */}
         <div className="relative h-32 md:h-full min-h-[160px] md:min-h-[400px]">
