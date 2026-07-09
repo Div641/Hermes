@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { useAuth } from '../../auth/hook/useAuth';
-import { initializeSocketConnection } from '../service/chat.socket';
-import { fetchChats, fetchMessages, sendMessageApi, deleteChatApi } from '../service/chat.api';
+import { useChat } from '../hooks/useChat';
 import ReactMarkdown from 'react-markdown';
 
 // Helper function to format timestamp
@@ -12,46 +11,35 @@ const formatTime = (dateString) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
-// Fallback Mock Data for preview & testing when backend is offline
-const MOCK_CHATS = [
-    { _id: "chat-1", title: "Analyze my performance", updatedAt: new Date().toISOString() },
-    { _id: "chat-2", title: "Suggest UI improvements", updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
-    { _id: "chat-3", title: "Explain this code", updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() },
-    { _id: "chat-4", title: "Best practices for API security", updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString() },
-    { _id: "chat-5", title: "Roadmap for Next.js", updatedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString() },
-    { _id: "chat-6", title: "Help with data structure", updatedAt: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString() }
-];
-
-const MOCK_MESSAGES = {
-    "chat-1": [
-        { _id: "m1", role: "user", content: "Can you help me analyze this user flow?", createdAt: new Date().toISOString() },
-        { _id: "m2", role: "ai", content: "Absolutely! I'd be happy to help you analyze the user flow. Please share the details or file, and I'll break it down for you.", createdAt: new Date().toISOString() }
-    ],
-    "chat-2": [
-        { _id: "m3", role: "user", content: "Suggest some UI improvements for a dashboard application.", createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
-        { _id: "m4", role: "ai", content: "For a modern dashboard, focus on glassmorphism (translucent blur panels), custom glowing charts, deep indigo/slate dark-mode color schemes, and micro-animations on interactive elements to make the interface feel alive.", createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }
-    ]
-};
-
 const Dashboard = () => {
     const auth = useAuth();
     const { user } = useSelector(state => state.auth);
 
     // Display values
-    const displayName = user?.username || "Divyanka";
+    const displayName = user?.username || "Creator";
 
-    // Component State
-    const [chats, setChats] = useState([]);
-    const [activeChatId, setActiveChatId] = useState(null);
-    const [messages, setMessages] = useState([]);
+    // Consume our new custom hook for Redux-integrated chat state & logic
+    const {
+        chats,
+        activeChatId,
+        messages,
+        isSending,
+        isMockMode,
+        loadChats,
+        loadChatMessages,
+        handleNewChat: newChat,
+        handleSendMessage: sendMessage,
+        handleDeleteChat: deleteChat,
+        initializeSocketConnection
+    } = useChat();
+
+    // Local input and UI states
     const [searchQuery, setSearchQuery] = useState("");
     const [inputMessage, setInputMessage] = useState("");
     const [selectedImage, setSelectedImage] = useState(null);
     
     // UI Layout States
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
-    const [isSending, setIsSending] = useState(false);
-    const [isMockMode, setIsMockMode] = useState(false);
     const [showAllChats, setShowAllChats] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
@@ -93,39 +81,9 @@ const Dashboard = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    // Fetch past chats
-    const loadChats = async () => {
-        try {
-            const data = await fetchChats();
-            setChats(data.chats || []);
-            setIsMockMode(false);
-        } catch (error) {
-            console.warn("Backend server offline. Falling back to mock data.", error);
-            setChats(MOCK_CHATS);
-            setIsMockMode(true);
-        }
-    };
-
-    // Load messages of a specific chat
-    const loadChatMessages = async (chatId) => {
-        setActiveChatId(chatId);
-        try {
-            if (isMockMode) {
-                setMessages(MOCK_MESSAGES[chatId] || []);
-                return;
-            }
-            const data = await fetchMessages(chatId);
-            setMessages(data.messages || []);
-        } catch (error) {
-            console.error("Failed to load messages:", error);
-            setMessages(MOCK_MESSAGES[chatId] || []);
-        }
-    };
-
     // Handle initiating a new chat
     const handleNewChat = () => {
-        setActiveChatId(null);
-        setMessages([]);
+        newChat();
         setInputMessage("");
     };
 
@@ -134,125 +92,22 @@ const Dashboard = () => {
         if (e) e.preventDefault();
         if ((!inputMessage.trim() && !selectedImage) || isSending) return;
 
-        console.log("handleSendMessage: activeChatId =", activeChatId);
         const userMsgText = inputMessage;
         const userMsgImage = selectedImage;
+
         setInputMessage("");
         setSelectedImage(null);
         if (fileInputRef.current) {
             fileInputRef.current.value = "";
         }
-        setIsSending(true);
 
-        const tempUserMessage = {
-            _id: `temp-u-${Date.now()}`,
-            role: "user",
-            content: userMsgText,
-            image: userMsgImage,
-            createdAt: new Date().toISOString()
-        };
-
-        // Append user message instantly to the UI
-        setMessages(prev => [...prev, tempUserMessage]);
-
-        try {
-            if (isMockMode) {
-                // Simulate local AI response for mock preview
-                setTimeout(() => {
-                    const tempAiMessage = {
-                        _id: `temp-a-${Date.now()}`,
-                        role: "ai",
-                        content: userMsgImage
-                            ? `Hello! I received your image in mock preview mode along with your prompt: "${userMsgText || "(no text)"}". Start your backend server to interact with the real Gemini model.`
-                            : `Hello! This is a mock AI response in preview mode to: "${userMsgText}". Start your backend server to interact with the real Gemini model.`,
-                        createdAt: new Date().toISOString()
-                    };
-                    
-                    // If it was a new chat, create a mock chat item
-                    if (!activeChatId) {
-                        const chatTitleText = userMsgText.trim() || "Image Analysis";
-                        const newMockChat = {
-                            _id: `chat-${Date.now()}`,
-                            title: chatTitleText.length > 25 ? chatTitleText.substring(0, 25) + "..." : chatTitleText,
-                            updatedAt: new Date().toISOString()
-                        };
-                        setChats(prev => [newMockChat, ...prev]);
-                        setActiveChatId(newMockChat._id);
-                        MOCK_MESSAGES[newMockChat._id] = [tempUserMessage, tempAiMessage];
-                    }
-
-                    setMessages(prev => {
-                        const history = prev.filter(m => !m._id.startsWith('temp-'));
-                        return [...history, tempUserMessage, tempAiMessage];
-                    });
-                    setIsSending(false);
-                }, 1000);
-                return;
-            }
-
-            // Real backend API call
-            const data = await sendMessageApi({ 
-                message: userMsgText, 
-                chatId: activeChatId, 
-                image: userMsgImage 
-            });
-            
-            // If it was a new chat, update chat list and select the new chat
-            if (!activeChatId) {
-                await loadChats();
-                setActiveChatId(data.chat._id);
-            }
-
-            setMessages(prev => {
-                // Remove any temp placeholders (like loading indicator)
-                const history = prev.filter(m => !m._id.startsWith('temp-'));
-                // Re-append user message with database-grade formatting
-                const userMsgObj = {
-                    _id: `u-${Date.now()}`,
-                    role: "user",
-                    content: userMsgText,
-                    image: userMsgImage,
-                    createdAt: tempUserMessage.createdAt
-                };
-                return [...history, userMsgObj, data.aiMessage];
-            });
-        } catch (error) {
-            console.error("Failed to send message:", error);
-            // Append an error message from AI
-            setMessages(prev => [...prev, {
-                _id: `error-${Date.now()}`,
-                role: "ai",
-                content: "Sorry, I encountered an error connecting to the Hermes server. Please ensure the backend is running.",
-                createdAt: new Date().toISOString()
-            }]);
-        } finally {
-            if (!isMockMode) {
-                setIsSending(false);
-            }
-        }
+        await sendMessage({ message: userMsgText, image: userMsgImage });
     };
 
     // Handle deleting a chat
     const handleDeleteChat = async (e, chatId) => {
         e.stopPropagation(); // Stop from clicking the chat
-        if (!confirm("Are you sure you want to delete this chat?")) return;
-
-        try {
-            if (!isMockMode) {
-                await deleteChatApi(chatId);
-            }
-            setChats(prev => prev.filter(c => c._id !== chatId));
-            if (activeChatId === chatId) {
-                handleNewChat();
-            }
-        } catch (error) {
-            console.error("Failed to delete chat:", error);
-            alert("Error deleting chat from server. Deleting locally.");
-            setChats(prev => prev.filter(c => c._id !== chatId));
-            if (activeChatId === chatId) {
-                handleNewChat();
-            }
-        }
+        await deleteChat(chatId);
     };
 
     // Group chats by date helper

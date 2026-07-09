@@ -42,7 +42,8 @@ export function useAuth() {
             const data = await getMe()
             dispatch(setUser(data.user))
         } catch (err) {
-            dispatch(setError(err.response?.data?.message || "Failed to fetch user data"))
+            // Silence session check error for guest users
+            console.log("No active session found.");
         } finally {
             dispatch(setLoading(false))
         }
@@ -102,12 +103,17 @@ export function useAuth() {
         }
     }
 
+    const clearError = () => {
+        dispatch(setError(null));
+    };
+
     return {
         handleRegister,
         handleLogin,
         handleGetMe,
         handleLogout,
-        handleResendVerification
+        handleResendVerification,
+        clearError
     }
 
 }

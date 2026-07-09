@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate, Link, Navigate } from 'react-router';
 import Navbar from '../../../components/Navbar';
@@ -12,7 +12,12 @@ export default function Login() {
   const [successMessage, setSuccessMessage] = useState('');
 
   const navigate = useNavigate();
-  const { handleLogin } = useAuth();
+  const { handleLogin, clearError } = useAuth();
+
+  // Clear any auth errors when component mounts
+  useEffect(() => {
+    clearError();
+  }, []);
 
   // Selectors from Redux store
   const user = useSelector((state) => state.auth.user);

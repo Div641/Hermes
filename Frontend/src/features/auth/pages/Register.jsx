@@ -22,12 +22,17 @@ export default function Register() {
   
 
   const navigate = useNavigate();
-  const { handleRegister, handleResendVerification } = useAuth();
+  const { handleRegister, handleResendVerification, clearError } = useAuth();
 
   // Selectors from Redux store
   const user = useSelector((state) => state.auth.user);
   const loading = useSelector((state) => state.auth.loading);
   const error = useSelector((state) => state.auth.error);
+
+  // Clear any auth errors when component mounts
+  useEffect(() => {
+    clearError();
+  }, []);
 
   // Set registered to true when user is successfully updated in Redux store
   useEffect(() => {
